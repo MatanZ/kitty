@@ -1641,6 +1641,8 @@ screen_erase_in_display(Screen *self, unsigned int how, bool private) {
         case 3:
             grman_clear(self->grman, how == 3, self->cell_size);
             a = 0; b = self->lines; break;
+	case 4:
+            a = 0; b = self->lines; break;
         default:
             return;
     }
