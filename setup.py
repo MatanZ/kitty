@@ -413,6 +413,7 @@ def kitty_env() -> Env:
     cppflags.append('-DXT_VERSION="{}"'.format('.'.join(map(str, version))))
     at_least_version('harfbuzz', 1, 5)
     cflags.extend(pkg_config('libpng', '--cflags-only-I'))
+    cflags.extend(pkg_config('libjpeg', '--cflags-only-I'))
     cflags.extend(pkg_config('lcms2', '--cflags-only-I'))
     if is_macos:
         platform_libs = [
@@ -437,8 +438,9 @@ def kitty_env() -> Env:
     pylib = get_python_flags(cflags)
     gl_libs = ['-framework', 'OpenGL'] if is_macos else pkg_config('gl', '--libs')
     libpng = pkg_config('libpng', '--libs')
+    libjpeg = pkg_config('libjpeg', '--libs')
     lcms2 = pkg_config('lcms2', '--libs')
-    ans.ldpaths += pylib + platform_libs + gl_libs + libpng + lcms2
+    ans.ldpaths += pylib + platform_libs + gl_libs + libpng + libjpeg + lcms2
     if is_macos:
         ans.ldpaths.extend('-framework Cocoa'.split())
     elif not is_openbsd:

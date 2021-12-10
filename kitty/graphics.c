@@ -20,6 +20,7 @@
 #include <zlib.h>
 #include <structmember.h>
 #include "png-reader.h"
+#include "jpeg-reader.h"
 PyTypeObject GraphicsManager_Type;
 
 #define DEFAULT_STORAGE_LIMIT 320u * (1024u * 1024u)
@@ -292,6 +293,26 @@ inflate_png(LoadData *load_data, uint8_t *buf, size_t bufsz) {
 // }}}
 
 static bool
+inflate_jpeg(LoadData *load_data, uint8_t *buf, size_t bufsz) {
+    struct jpeg_decompress_struct cinfo;
+    unsigned char * ret = inflate_jpeg_inner(&cinfo, buf, bufsz);
+    if (ret) {
+        int bmp_size = cinfo.output_width * cinfo.output_components * cinfo.output_height;
+        free_load_data(load_data);
+        load_data->width = cinfo.output_width;
+        load_data->height = cinfo.output_height;
+        jpeg_finish_decompress(&cinfo);
+        jpeg_destroy_decompress(&cinfo);
+        load_data->buf = ret;
+        load_data->buf_capacity = bmp_size;
+        load_data->buf_used = bmp_size;
+        load_data->data_sz = bmp_size;
+        return true;
+    }
+    return false;
+}
+
+static bool
 add_trim_predicate(Image *img) {
     return !img->root_frame_data_loaded || (!img->client_id && !img->refcnt);
 }
@@ -386,7 +407,7 @@ get_free_client_id(const GraphicsManager *self) {
 #define ABRT(code, ...) { set_command_failed_response(code, __VA_ARGS__); self->currently_loading.loading_completed_successfully = false; free_load_data(&self->currently_loading); return NULL; }
 
 #define MAX_DATA_SZ (4u * 100000000u)
-enum FORMATS { RGB=24, RGBA=32, PNG=100 };
+enum FORMATS { RGB=24, RGBA=32, PNG=100, JPEG=101 };
 
 static Image*
 load_image_data(GraphicsManager *self, Image *img, const GraphicsCommand *g, const unsigned char transmission_type, const uint32_t data_fmt, const uint8_t *payload) {
@@ -434,7 +455,7 @@ load_image_data(GraphicsManager *self, Image *img, const GraphicsCommand *g, con
 
 static Image*
 process_image_data(GraphicsManager *self, Image* img, const GraphicsCommand *g, const unsigned char transmission_type, const uint32_t data_fmt) {
-    bool needs_processing = g->compressed || data_fmt == PNG;
+    bool needs_processing = g->compressed || data_fmt == PNG || data_fmt == JPEG;
     if (needs_processing) {
         uint8_t *buf; size_t bufsz;
 #define IB { if (self->currently_loading.buf) { buf = self->currently_loading.buf; bufsz = self->currently_loading.buf_used; } else { buf = self->currently_loading.mapped_file; bufsz = self->currently_loading.mapped_file_sz; } }
@@ -454,6 +475,12 @@ process_image_data(GraphicsManager *self, Image* img, const GraphicsCommand *g, 
             case PNG:
                 IB;
                 if (!inflate_png(&self->currently_loading, buf, bufsz)) {
+                    self->currently_loading.loading_completed_successfully = false; return NULL;
+                }
+                break;
+            case JPEG:
+                IB;
+                if (!inflate_jpeg(&self->currently_loading, buf, bufsz)) {
                     self->currently_loading.loading_completed_successfully = false; return NULL;
                 }
                 break;
@@ -495,6 +522,12 @@ initialize_load_data(GraphicsManager *self, const GraphicsCommand *g, Image *img
             self->currently_loading.is_4byte_aligned = true;
             self->currently_loading.is_opaque = false;
             self->currently_loading.data_sz = g->data_sz ? g->data_sz : 1024 * 100;
+            break;
+        case JPEG:
+            if (g->data_sz > MAX_DATA_SZ) ABRT("EINVAL", "JPEG data size too large");
+            self->currently_loading.is_4byte_aligned = false;
+            self->currently_loading.is_opaque = true;
+            self->currently_loading.data_sz = g->data_sz ? g->data_sz : 4 * 1024 * 1024;
             break;
         case RGB:
         case RGBA:
