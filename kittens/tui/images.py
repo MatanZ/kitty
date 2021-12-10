@@ -185,6 +185,7 @@ def render_image(
     m: ImageData,
     available_width: int, available_height: int,
     scale_up: bool,
+    quality: int,
     only_first_frame: bool = False
 ) -> RenderedImage:
     import tempfile
@@ -211,7 +212,7 @@ def render_image(
             scaled = True
     if scaled or width > available_width or height > available_height:
         width, height = fit_image(width, height, available_width, available_height)
-        resize_cmd = ['-resize', f'{width}x{height}!']
+        resize_cmd = ['-resize', f'{width}x{height}!', '-quality', f'{quality}']
         if get_multiple_frames:
             # we have to coalesce, resize and de-coalesce all frames
             resize_cmd = ['-coalesce'] + resize_cmd + ['-deconstruct']
@@ -261,7 +262,8 @@ def render_image(
                 raise OutdatedImageMagick(f'Unexpected output filename: {x!r} produced by ImageMagick command: {last_imagemagick_cmd}')
             f.path = output_prefix + f'-{index}.{m.mode}'
             os.rename(os.path.join(tdir, x), f.path)
-            check_resize(f)
+            if m.mode != 'jpeg':
+                check_resize(f)
     f = ans.frames[0]
     if f.width != ans.width or f.height != ans.height:
         with open(f.path, 'r+b') as ff:
@@ -283,12 +285,13 @@ def render_as_single_image(
     path: str, m: ImageData,
     available_width: int, available_height: int,
     scale_up: bool,
+    quality: int,
     tdir: Optional[str] = None
 ) -> Tuple[str, int, int]:
     import tempfile
     fd, output = tempfile.mkstemp(prefix='icat-', suffix=f'.{m.mode}', dir=tdir)
     os.close(fd)
-    result = render_image(path, output, m, available_width, available_height, scale_up, only_first_frame=True)
+    result = render_image(path, output, m, available_width, available_height, scale_up, quality=quality, only_first_frame=True)
     os.rename(result.frames[0].path, output)
     return output, result.width, result.height
 

@@ -120,6 +120,12 @@ only the first frame of the animation is displayed. Otherwise, the animation
 is looped the specified number of times.
 
 
+--quality
+default=75
+type=int
+Jpeg quality parameters used by ImageMagick when using jpeg format.
+
+
 --hold
 type=bool-set
 Wait for a key press before exiting after displaying the images.
@@ -199,7 +205,7 @@ def set_cursor_for_place(place: 'Place', cmd: GraphicsCommand, width: int, heigh
 
 def write_chunked(cmd: GraphicsCommand, data: bytes) -> None:
     cmd = cmd.clone()
-    if cmd.f != 100:
+    if cmd.f < 100:
         data = zlib.compress(data)
         cmd.o = 'z'
     data = standard_b64encode(data)
@@ -331,10 +337,14 @@ def process(path: str, args: IcatCLIOptions, parsed_opts: ParsedOpts, is_tempfil
         width, height = m.width, m.height
         file_removed = transmit_mode == 't'
     else:
-        fmt = 24 if m.mode == 'rgb' else 32
+        if m.fmt == 'jpeg':
+            m.mode = 'jpeg'
+            fmt=101
+        else:
+            fmt = 24 if m.mode == 'rgb' else 32
         transmit_mode = 't'
         if len(m) == 1 or args.loop == 0:
-            outfile, width, height = render_as_single_image(path, m, available_width, available_height, args.scale_up)
+            outfile, width, height = render_as_single_image(path, m, available_width, available_height, args.scale_up, args.quality)
         else:
             import struct
             use_number = max(1, struct.unpack('@I', os.urandom(4))[0])
